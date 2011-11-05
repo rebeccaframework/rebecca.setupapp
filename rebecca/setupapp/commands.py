@@ -20,6 +20,12 @@ class SetupApp(object):
 
     def make_parser(self):
         parser = ArgumentParser()
+
+        self.add_commands(parser)
+
+        return parser
+
+    def add_commands(self, parser):
         parsers = parser.add_subparsers()
         for name, c in get_setup_commands(self.registry):
             argspec = inspect.getargspec(c)
@@ -34,15 +40,18 @@ class SetupApp(object):
                     sub.add_argument('--' + n, default=defaults[n])
             sub.set_defaults(command_name=name)
 
-        return parser
 
 def main(args=sys.argv[1:]):
     inifile, args = args[0], args[1:]
     app = bootstrap(inifile)
-    setup_app = SetupApp(app['registry'])
-    parser = setup_app.make_parser()
-    args = parser.parse_args(args)
-    setup_app(args.command_name)
+    closer = app['closer']
+    try:
+        setup_app = SetupApp(app['registry'])
+        parser = setup_app.make_parser()
+        args = parser.parse_args(args)
+        setup_app(args.command_name)
+    finally:
+        closer()
 
 if __name__ == '__main__':
     main()
