@@ -1,6 +1,7 @@
 import sys
 from argparse import ArgumentParser
 from pyramid.paster import bootstrap
+import inspect
 
 from .util import get_setup_commands, get_setup_command
 
@@ -17,25 +18,31 @@ class SetupApp(object):
         command = get_setup_command(self.registry, command_name)
         command()
 
-def make_parser():
-    parser = ArgumentParser()
-    parser.add_argument('ini')
-    parser.add_argument('-l', '--list',
-        action='store_true',
-        help="list command names")
-    parser.add_argument('command_name',
-        default='main')
-    return parser
+    def make_parser(self):
+        parser = ArgumentParser()
+        parsers = parser.add_subparsers()
+        for name, c in get_setup_commands(self.registry):
+            argspec = inspect.getargspec(c)
+            defaults = {}
+            if argspec[3] is not None:
+                defaults = dict(zip(reversed(argspec[0]), reversed(argspec[3])))
+            sub = parsers.add_parser(name, help=c.__doc__)
+            for n in argspec[0]:
+                if n not in defaults:
+                    sub.add_argument(n)
+                else:
+                    sub.add_argument('--' + n, default=defaults[n])
+            sub.set_defaults(command_name=name)
+
+        return parser
 
 def main(args=sys.argv[1:]):
-    parser = make_parser()
-    args = parser.parse_args(args)
-    app = bootstrap(args.ini)
+    inifile, args = args[0], args[1:]
+    app = bootstrap(inifile)
     setup_app = SetupApp(app['registry'])
-    if args.list:
-        print setup_app.command_names
-    else:
-        setup_app(args.command_name)
+    parser = setup_app.make_parser()
+    args = parser.parse_args(args)
+    setup_app(args.command_name)
 
 if __name__ == '__main__':
     main()
